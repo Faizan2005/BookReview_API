@@ -57,7 +57,7 @@ app.post("/books", async (req, res) => {
 
 app.get("/books", async (req, res) => {
   const userID = req.userId;
-  const { author, genre, page, limit } = req.query;
+  const { author, genre, page = 1, limit = 10 } = req.query;
 
   const offset = (page - 1) * limit;
 
@@ -96,11 +96,45 @@ app.get("/books", async (req, res) => {
   }
 });
 
-app.get("/books/:author", (req, res) => {});
+app.get("/books/:id", async (req, res) => {
+  const bookID = req.params(id);
+  const { page = 1, limit = 10 } = req.query;
+  const offset = (page - 1) * limit;
 
-app.get("/books/:genre", (req, res) => {});
+  try {
+    const bookResult = await pool.query(`SELECT * FROM books WHERE id=$1`, [
+      bookID,
+    ]);
 
-app.get("/books/:id", (req, res) => {});
+    if (bookResult.rows.length === 0) {
+      return res.status(404).json({ error: "Book not found" });
+    }
+
+    const book = bookResult.rows[0];
+
+    const ratingResult = await pool.query(
+      `SELECT AVG(rating)::numeric(2,1) AS avg_rating FROM reviews WHERE book_id = $1`,
+      [bookID]
+    );
+    const avgRating = ratingResult.rows[0].avg_rating || 0;
+
+    const reviewResult = await pool.query(
+      `SELECT user_id, rating, comment FROM reviews WHERE book_id=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+      [bookID, limit, offset]
+    );
+
+    res.status(200).json({
+      book,
+      average_rating: avgRating,
+      reviews: reviewResult.rows,
+      page: Number(page),
+      limit: Number(limit),
+    });
+  } catch (err) {
+    console.error("Error fetching book details:", err);
+    res.status(500).json({ error: "Failed to fetch book details." });
+  }
+});
 
 app.post("/books/:id/reviews", (req, res) => {});
 
