@@ -80,12 +80,12 @@ app.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials." });
     }
 
-    const isMatch = bcrypt.compare(password, validateUser.password);
+    const isMatch = await bcrypt.compare(password, validateUser.password_hash);
     if (!isMatch) {
       return res.status(401).json({ error: "Invalid credentials." });
     }
 
-    const token = jwt.sign({ userId: req.user.id }, JWT_SECRET, {
+    const token = jwt.sign({ userId: validateUser.id }, JWT_SECRET, {
       expiresIn: "1h",
     });
 
@@ -103,7 +103,10 @@ app.post("/login", async (req, res) => {
 });
 
 function authenticateToken(req, res, next) {
-  const token = req.cookies.jwt;
+  // const token = req.cookies.jwt;
+
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
 
   if (!token) {
     return res.status(401).json({ error: "No token, authorization denied" });
@@ -142,14 +145,13 @@ app.post("/books", authenticateToken, async (req, res) => {
 });
 
 app.get("/books", authenticateToken, async (req, res) => {
-  const userID = req.userId;
   const { author, genre, page = 1, limit = 10 } = req.query;
-
   const offset = (page - 1) * limit;
 
   const filters = [];
   const values = [];
 
+  // Dynamically build filters
   if (author) {
     values.push(`%${author}%`);
     filters.push(`author ILIKE $${values.length}`);
@@ -160,14 +162,19 @@ app.get("/books", authenticateToken, async (req, res) => {
     filters.push(`genre ILIKE $${values.length}`);
   }
 
-  const completeFilter =
-    filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
+  const whereClause = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
+
+  // Add pagination params (limit, offset) at the end
+  values.push(limit, offset);
+  const limitParam = values.length - 1;
+  const offsetParam = values.length;
 
   try {
     const result = await pool.query(
-      `SELECT * FROM books ${completeFilter} ORDER BY created_at DESC LIMIT $${
-        values.length - 1
-      } OFFSET $${values.length}`,
+      `SELECT * FROM books 
+       ${whereClause} 
+       ORDER BY created_at DESC 
+       LIMIT $${limitParam} OFFSET $${offsetParam}`,
       values
     );
 
