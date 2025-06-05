@@ -3,6 +3,7 @@ const http = require("http");
 const pool = require("./models/storage");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+const cookieParser = require("cookie-parser");
 require("dotenv").config();
 
 const app = express();
@@ -11,12 +12,9 @@ const server = http.createServer(app);
 
 const JWT_SECRET = process.env.JWT_SECRET || "test-secret-key";
 
-// --- Database Connection Test and Log ---
 pool.query("SELECT NOW()", (err, res) => {
   if (err) {
     console.error("[Database] Connection Test FAILED:", err.stack);
-    // Consider exiting the process if database is critical and not connected
-    // process.exit(1);
   } else {
     console.log(
       "[Database] Connected to PostgreSQL! Current DB time:",
@@ -27,11 +25,10 @@ pool.query("SELECT NOW()", (err, res) => {
 
 pool.on("error", (err) => {
   console.error("[Database] Unexpected error on idle client", err);
-  // It's often good practice to exit if the main database pool has a critical error
-  // process.exit(-1);
 });
 
 app.use(express.json());
+app.use(cookieParser());
 
 const PORT = process.env.PORT || 3000;
 
@@ -52,15 +49,18 @@ app.post("/signup", async (req, res) => {
       return res.status(400).json({ error: "Email already registered." });
     }
 
-    const passwordHash = bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 10);
 
     const newUser = await pool.query(
       `INSERT INTO users (name, email, password_hash)
              VALUES ($1, $2, $3)
-             RETURNING id, name, email`
+             RETURNING id, name, email`,
+      [name, email, passwordHash]
     );
 
-    res.status(201).json({ message: "User registered.", user: result.rows[0] });
+    res
+      .status(201)
+      .json({ message: "User registered.", user: newUser.rows[0] });
   } catch (err) {
     console.error("Signup error:", err);
     res.status(500).json({ error: "Signup failed." });
@@ -94,6 +94,8 @@ app.post("/login", async (req, res) => {
       secure: process.env.NODE_ENV === "production",
       maxAge: 3600000,
     });
+
+    res.status(200).json({ message: "Logged in successfully.", token });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ error: "Login failed." });
