@@ -100,7 +100,25 @@ app.post("/login", async (req, res) => {
   }
 });
 
-app.post("/books", async (req, res) => {
+function authenticateToken(req, res, next) {
+  const token = req.cookies.jwt;
+
+  if (!token) {
+    return res.status(401).json({ error: "No token, authorization denied" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    req.userId = decoded.userId;
+    next();
+  } catch (err) {
+    console.error("Invalid or expired token:", err);
+    return res.status(403).json({ error: "Token is invalid or expired" });
+  }
+}
+
+app.post("/books", authenticateToken, async (req, res) => {
   const userID = req.userId;
   const { title, author, genre } = req.body;
 
@@ -121,7 +139,7 @@ app.post("/books", async (req, res) => {
   }
 });
 
-app.get("/books", async (req, res) => {
+app.get("/books", authenticateToken, async (req, res) => {
   const userID = req.userId;
   const { author, genre, page = 1, limit = 10 } = req.query;
 
@@ -162,7 +180,7 @@ app.get("/books", async (req, res) => {
   }
 });
 
-app.get("/books/:id", async (req, res) => {
+app.get("/books/:id", authenticateToken, async (req, res) => {
   const bookID = req.params.id;
   const { page = 1, limit = 10 } = req.query;
   const offset = (page - 1) * limit;
@@ -202,7 +220,7 @@ app.get("/books/:id", async (req, res) => {
   }
 });
 
-app.post("/books/:id/reviews", async (req, res) => {
+app.post("/books/:id/reviews", authenticateToken, async (req, res) => {
   const userID = req.userId;
   const bookID = req.params.id;
   const { rating, comment } = req.body;
@@ -238,7 +256,7 @@ app.post("/books/:id/reviews", async (req, res) => {
   }
 });
 
-app.put("/reviews/:id", async (req, res) => {
+app.put("/reviews/:id", authenticateToken, async (req, res) => {
   const reviewID = req.params.id;
   const userID = req.userId;
   const { rating, comment } = req.body;
@@ -267,7 +285,7 @@ app.put("/reviews/:id", async (req, res) => {
   }
 });
 
-app.delete("/reviews/:id", async (req, res) => {
+app.delete("/reviews/:id", authenticateToken, async (req, res) => {
   const reviewID = req.params.id;
   const userID = req.userId;
 
