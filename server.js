@@ -170,6 +170,59 @@ app.post("/books/:id/reviews", async (req, res) => {
   }
 });
 
-app.put("/reviews/:id", (req, res) => {});
+app.put("/reviews/:id", async (req, res) => {
+  const reviewID = req.params.id;
+  const userID = req.userId; 
+  const { rating, comment } = req.body;
 
-app.delete("/reviews/:id", (req, res) => {});
+  try {
+
+    const checkResult = await pool.query(
+      `SELECT * FROM reviews WHERE id = $1 AND user_id = $2`,
+      [reviewID, userID]
+    );
+
+    if (checkResult.rows.length === 0) {
+      return res.status(403).json({ error: "You can only update your own review." });
+    }
+
+    await pool.query(
+      `UPDATE reviews SET rating = $1, comment = $2 WHERE id = $3`,
+      [rating, comment, reviewID]
+    );
+
+    res.status(200).json({ message: "Review updated successfully." });
+  } catch (err) {
+    console.error("Error updating review:", err);
+    res.status(500).json({ error: "Failed to update review." });
+  }
+});
+
+app.delete("/reviews/:id", async (req, res) => {
+
+
+    const reviewID = req.params.id;
+  const userID = req.userId; 
+
+  try {
+
+    const checkResult = await pool.query(
+      `SELECT * FROM reviews WHERE id = $1 AND user_id = $2`,
+      [reviewID, userID]
+    );
+
+    if (checkResult.rows.length === 0) {
+      return res.status(403).json({ error: "You can only delete your own review." });
+    }
+
+    await pool.query(
+      `DELETE FROM reviews WHERE id=$1`,
+      [reviewID]
+    );
+
+    res.status(200).json({ message: "Review deleted successfully." });
+  } catch (err) {
+    console.error("Error delete review:", err);
+    res.status(500).json({ error: "Failed to delete review." });
+  }
+});
