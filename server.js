@@ -67,6 +67,39 @@ app.post("/signup", async (req, res) => {
   }
 });
 
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const validationResult = await pool.query(
+      `SELECT * FROM users WHERE email=$1`,
+      [email]
+    );
+    const validateUser = validationResult.rows[0];
+    if (!validateUser) {
+      return res.status(401).json({ error: "Invalid credentials." });
+    }
+
+    const isMatch = bcrypt.compare(password, validateUser.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid credentials." });
+    }
+
+    const token = jwt.sign({ userId: req.user.id }, JWT_SECRET, {
+      expiresIn: "1h",
+    });
+
+    res.cookie("jwt", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 3600000,
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Login failed." });
+  }
+});
+
 app.post("/books", async (req, res) => {
   const userID = req.userId;
   const { title, author, genre } = req.body;
