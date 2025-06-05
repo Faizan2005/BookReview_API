@@ -1,11 +1,15 @@
 const express = require("express");
 const http = require("http");
 const pool = require("./models/storage");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 require("dotenv").config();
 
 const app = express();
 
 const server = http.createServer(app);
+
+const JWT_SECRET = process.env.JWT_SECRET || "test-secret-key";
 
 // --- Database Connection Test and Log ---
 pool.query("SELECT NOW()", (err, res) => {
@@ -27,11 +31,40 @@ pool.on("error", (err) => {
   // process.exit(-1);
 });
 
+app.use(express.json());
+
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
   console.log(`[Server] Listening on port ${PORT}...`);
   console.log(`[Server] Visit http://localhost:${PORT}`);
+});
+
+app.post("/signup", async (req, res) => {
+  const { name, email, password } = req.body;
+
+  try {
+    const checkExistingUser = await pool.query(
+      `SELECT * FROM users WHERE email=$1`,
+      [email]
+    );
+    if (checkExistingUser.rows.length > 0) {
+      return res.status(400).json({ error: "Email already registered." });
+    }
+
+    const passwordHash = bcrypt.hash(password, 10);
+
+    const newUser = await pool.query(
+      `INSERT INTO users (name, email, password_hash)
+             VALUES ($1, $2, $3)
+             RETURNING id, name, email`
+    );
+
+    res.status(201).json({ message: "User registered.", user: result.rows[0] });
+  } catch (err) {
+    console.error("Signup error:", err);
+    res.status(500).json({ error: "Signup failed." });
+  }
 });
 
 app.post("/books", async (req, res) => {
@@ -138,7 +171,7 @@ app.get("/books/:id", async (req, res) => {
 
 app.post("/books/:id/reviews", async (req, res) => {
   const userID = req.userId;
-  const bookID = req.params.id; 
+  const bookID = req.params.id;
   const { rating, comment } = req.body;
 
   try {
@@ -148,7 +181,9 @@ app.post("/books/:id/reviews", async (req, res) => {
     );
 
     if (existingReview.rows.length > 0) {
-      return res.status(400).json({ error: "You have already reviewed this book." });
+      return res
+        .status(400)
+        .json({ error: "You have already reviewed this book." });
     }
 
     const reviewResult = await pool.query(
@@ -162,7 +197,7 @@ app.post("/books/:id/reviews", async (req, res) => {
 
     res.status(201).json({
       message: "Review added successfully.",
-      review_id: reviewID
+      review_id: reviewID,
     });
   } catch (err) {
     console.error("Error submitting review:", err);
@@ -172,18 +207,19 @@ app.post("/books/:id/reviews", async (req, res) => {
 
 app.put("/reviews/:id", async (req, res) => {
   const reviewID = req.params.id;
-  const userID = req.userId; 
+  const userID = req.userId;
   const { rating, comment } = req.body;
 
   try {
-
     const checkResult = await pool.query(
       `SELECT * FROM reviews WHERE id = $1 AND user_id = $2`,
       [reviewID, userID]
     );
 
     if (checkResult.rows.length === 0) {
-      return res.status(403).json({ error: "You can only update your own review." });
+      return res
+        .status(403)
+        .json({ error: "You can only update your own review." });
     }
 
     await pool.query(
@@ -199,26 +235,22 @@ app.put("/reviews/:id", async (req, res) => {
 });
 
 app.delete("/reviews/:id", async (req, res) => {
-
-
-    const reviewID = req.params.id;
-  const userID = req.userId; 
+  const reviewID = req.params.id;
+  const userID = req.userId;
 
   try {
-
     const checkResult = await pool.query(
       `SELECT * FROM reviews WHERE id = $1 AND user_id = $2`,
       [reviewID, userID]
     );
 
     if (checkResult.rows.length === 0) {
-      return res.status(403).json({ error: "You can only delete your own review." });
+      return res
+        .status(403)
+        .json({ error: "You can only delete your own review." });
     }
 
-    await pool.query(
-      `DELETE FROM reviews WHERE id=$1`,
-      [reviewID]
-    );
+    await pool.query(`DELETE FROM reviews WHERE id=$1`, [reviewID]);
 
     res.status(200).json({ message: "Review deleted successfully." });
   } catch (err) {
