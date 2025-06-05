@@ -7,11 +7,11 @@ const cookieParser = require("cookie-parser");
 require("dotenv").config();
 
 const app = express();
-
 const server = http.createServer(app);
 
 const JWT_SECRET = process.env.JWT_SECRET || "test-secret-key";
 
+// Test database connection
 pool.query("SELECT NOW()", (err, res) => {
   if (err) {
     console.error("[Database] Connection Test FAILED:", err.stack);
@@ -23,20 +23,24 @@ pool.query("SELECT NOW()", (err, res) => {
   }
 });
 
+// Handle idle DB client errors
 pool.on("error", (err) => {
   console.error("[Database] Unexpected error on idle client", err);
 });
 
+// Middleware for JSON parsing and cookie handling
 app.use(express.json());
 app.use(cookieParser());
 
 const PORT = process.env.PORT || 3000;
 
+// Start HTTP server
 server.listen(PORT, () => {
   console.log(`[Server] Listening on port ${PORT}...`);
   console.log(`[Server] Visit http://localhost:${PORT}`);
 });
 
+// User signup route
 app.post("/signup", async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -67,6 +71,7 @@ app.post("/signup", async (req, res) => {
   }
 });
 
+// User login route
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -89,6 +94,7 @@ app.post("/login", async (req, res) => {
       expiresIn: "1h",
     });
 
+    // Send token in HTTP-only cookie
     res.cookie("jwt", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -102,9 +108,8 @@ app.post("/login", async (req, res) => {
   }
 });
 
+// Middleware to authenticate JWT token
 function authenticateToken(req, res, next) {
-  // const token = req.cookies.jwt;
-
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
@@ -114,7 +119,6 @@ function authenticateToken(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-
     req.userId = decoded.userId;
     next();
   } catch (err) {
@@ -123,6 +127,7 @@ function authenticateToken(req, res, next) {
   }
 }
 
+// Add a new book (authenticated route)
 app.post("/books", authenticateToken, async (req, res) => {
   const userID = req.userId;
   const { title, author, genre } = req.body;
@@ -144,6 +149,7 @@ app.post("/books", authenticateToken, async (req, res) => {
   }
 });
 
+// Fetch books with optional filters and pagination
 app.get("/books", async (req, res) => {
   const { author, genre, page = 1, limit = 10 } = req.query;
   const offset = (page - 1) * limit;
@@ -151,7 +157,6 @@ app.get("/books", async (req, res) => {
   const filters = [];
   const values = [];
 
-  // Dynamically build filters
   if (author) {
     values.push(`%${author}%`);
     filters.push(`author ILIKE $${values.length}`);
@@ -189,6 +194,7 @@ app.get("/books", async (req, res) => {
   }
 });
 
+// Get single book by ID along with average rating and reviews
 app.get("/books/:id", async (req, res) => {
   const bookID = req.params.id;
   const { page = 1, limit = 10 } = req.query;
@@ -229,6 +235,7 @@ app.get("/books/:id", async (req, res) => {
   }
 });
 
+// Submit a new review for a book (authenticated route)
 app.post("/books/:id/reviews", authenticateToken, async (req, res) => {
   const userID = req.userId;
   const bookID = req.params.id;
@@ -265,6 +272,7 @@ app.post("/books/:id/reviews", authenticateToken, async (req, res) => {
   }
 });
 
+// Update an existing review (authenticated route)
 app.put("/reviews/:id", authenticateToken, async (req, res) => {
   const reviewID = req.params.id;
   const userID = req.userId;
@@ -294,6 +302,7 @@ app.put("/reviews/:id", authenticateToken, async (req, res) => {
   }
 });
 
+// Delete a review (authenticated route)
 app.delete("/reviews/:id", authenticateToken, async (req, res) => {
   const reviewID = req.params.id;
   const userID = req.userId;
@@ -319,6 +328,7 @@ app.delete("/reviews/:id", authenticateToken, async (req, res) => {
   }
 });
 
+// Search books by title and/or author
 app.get("/search", async (req, res) => {
   const { title, author } = req.query;
 
