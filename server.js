@@ -144,7 +144,7 @@ app.post("/books", authenticateToken, async (req, res) => {
   }
 });
 
-app.get("/books", authenticateToken, async (req, res) => {
+app.get("/books", async (req, res) => {
   const { author, genre, page = 1, limit = 10 } = req.query;
   const offset = (page - 1) * limit;
 
@@ -162,9 +162,9 @@ app.get("/books", authenticateToken, async (req, res) => {
     filters.push(`genre ILIKE $${values.length}`);
   }
 
-  const whereClause = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
+  const whereClause =
+    filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
 
-  // Add pagination params (limit, offset) at the end
   values.push(limit, offset);
   const limitParam = values.length - 1;
   const offsetParam = values.length;
@@ -189,7 +189,7 @@ app.get("/books", authenticateToken, async (req, res) => {
   }
 });
 
-app.get("/books/:id", authenticateToken, async (req, res) => {
+app.get("/books/:id", async (req, res) => {
   const bookID = req.params.id;
   const { page = 1, limit = 10 } = req.query;
   const offset = (page - 1) * limit;
@@ -316,5 +316,34 @@ app.delete("/reviews/:id", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error("Error delete review:", err);
     res.status(500).json({ error: "Failed to delete review." });
+  }
+});
+
+app.get("/search", async (req, res) => {
+  const { title, author } = req.query;
+
+  const filters = [];
+  const values = [];
+
+  if (title) {
+    values.push(`%${title}%`);
+    filters.push(`title ILIKE $${values.length}`);
+  }
+
+  if (author) {
+    values.push(`%${author}%`);
+    filters.push(`author ILIKE $${values.length}`);
+  }
+
+  const whereClause =
+    filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
+
+  try {
+    const queryText = `SELECT * FROM books ${whereClause} ORDER BY created_at DESC`;
+    const { rows } = await pool.query(queryText, values);
+    res.json(rows);
+  } catch (err) {
+    console.error("Search error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
