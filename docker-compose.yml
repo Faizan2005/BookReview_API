@@ -1,0 +1,36 @@
+version: "3.8" # Specifies the Docker Compose file format version
+
+services:
+  db:
+    image: postgres:16 # Use a specific PostgreSQL version
+    restart: always # Always restart the container if it stops
+    environment: # Environment variables for the PostgreSQL container
+      POSTGRES_USER: ${DB_USER} # Uses variable from .env
+      POSTGRES_PASSWORD: ${DB_PASSWORD} # Uses variable from .env
+      POSTGRES_DB: ${DB_NAME} # Uses variable from .env
+    ports:
+      - "5433:5432" # Expose DB port to your host machine (optional, but good for local access)
+    volumes:
+      - db_data:/var/lib/postgresql/data # Persistent storage for database data
+      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d # Mount init scripts for schema creation
+
+  api:
+    build: . # Build the image from the Dockerfile in the current directory
+    ports:
+      - "3000:3000" # Expose API port to your host machine
+    environment: # Environment variables for your Node.js API container
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db # IMPORTANT: Use the service name 'db' as the hostname
+      DB_NAME: ${DB_NAME}
+      DB_PORT: ${DB_PORT}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on: # Ensure 'db' starts before 'api'
+      - db
+    volumes:
+      - .:/app # Mount your local project directory into the container
+    command: ["node", "server.js"] # Override default command if needed
+
+# Define named volumes for persistent data
+volumes:
+  db_data:
