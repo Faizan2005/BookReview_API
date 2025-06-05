@@ -97,7 +97,7 @@ app.get("/books", async (req, res) => {
 });
 
 app.get("/books/:id", async (req, res) => {
-  const bookID = req.params(id);
+  const bookID = req.params.id;
   const { page = 1, limit = 10 } = req.query;
   const offset = (page - 1) * limit;
 
@@ -136,7 +136,39 @@ app.get("/books/:id", async (req, res) => {
   }
 });
 
-app.post("/books/:id/reviews", (req, res) => {});
+app.post("/books/:id/reviews", async (req, res) => {
+  const userID = req.userId;
+  const bookID = req.params.id; 
+  const { rating, comment } = req.body;
+
+  try {
+    const existingReview = await pool.query(
+      `SELECT id FROM reviews WHERE user_id = $1 AND book_id = $2`,
+      [userID, bookID]
+    );
+
+    if (existingReview.rows.length > 0) {
+      return res.status(400).json({ error: "You have already reviewed this book." });
+    }
+
+    const reviewResult = await pool.query(
+      `INSERT INTO reviews (user_id, book_id, rating, comment)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [userID, bookID, rating, comment]
+    );
+
+    const reviewID = reviewResult.rows[0].id;
+
+    res.status(201).json({
+      message: "Review added successfully.",
+      review_id: reviewID
+    });
+  } catch (err) {
+    console.error("Error submitting review:", err);
+    res.status(500).json({ error: "Failed to submit review." });
+  }
+});
 
 app.put("/reviews/:id", (req, res) => {});
 
